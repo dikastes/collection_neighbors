@@ -1,6 +1,8 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import sys
+import xml.etree.ElementTree as ET
+import urllib.request
 
 content_keys = {}
 
@@ -31,7 +33,7 @@ def main(rism_id):
                               #print(measured_collections)
 
 def count_equal(str1, str2):
-    equals = { char for char in str1 if char in str2 }
+    equals = {char for char in str1 if char in str2}
     return len(equals)
 
 levenshtein_buffer = {}
@@ -49,16 +51,36 @@ def levenshtein(str1, str2):
         return len(str1)
     if str1[0] == str2[0]:
         return levenshtein(str1[1:], str2[1:])
-    dist1 = levenshtein(str1, str2[1:])
-    dist2 = levenshtein(str1[1:], str2)
-    dist3 = levenshtein(str1, str2)
+    dist1 = 1 + levenshtein(str1, str2[1:])
+    dist2 = 1 + levenshtein(str1[1:], str2)
+    dist3 = 1 + levenshtein(str1[1:], str2[1:])
     return min(dist1, dist2, dist3)
 
 def get_signature(collection):
     return ''.join([ get_content(work) for work in collection ])
 
 def get_works(rism_id):
-    return []
+    print(f"Querying items of collection https://opac.rism.info/id/rismid/{rism_id}?format=marc")
+    resource = urllib.request.urlopen(f"https://opac.rism.info/id/rismid/{rism_id}?format=marc").read()
+    parsed_resource = ET.fromstring(resource)
+    collection_items = [ retrieve_w_subfield(item) for item in parsed_resource if 'tag' in item.attrib and item.attrib['tag'] == '774']
+    works = [retrieve_work_node(item) for item in collection_items]
+    return [work for work in works if work != None]
+
+def retrieve_work_node(item):
+    # TODO DRYify next 3 lines
+    print(f"Querying work_node of item https://opac.rism.info/id/rismid/{item}?format=marc")
+    resource = urllib.request.urlopen(f"https://opac.rism.info/id/rismid/{item}?format=marc").read()
+    parsed_resource = ET.fromstring(resource)
+    work_field = [field for field in parsed_resource if 'tag' in field.attrib and field.attrib['tag'] == '930']
+    if len(work_field):
+        return [subfield for subfield in work_field[0] if 'code' in subfield.attrib and subfield.attrib['code'] == '0' and subfield.text.isnumeric()][0].text
+    else:
+        return None
+
+def retrieve_w_subfield(item):
+    subfield_w = [subfield for subfield in item if 'code' in subfield.attrib and subfield.attrib['code'] == 'w']
+    return subfield_w[0].text
 
 def get_characteristics(collection):
     return []
